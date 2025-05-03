@@ -15,6 +15,8 @@ class ApkAnalyzer(private val context: Context) {
             "android.permission.SEND_SMS",
             "android.permission.CALL_PHONE",
             "android.permission.READ_CONTACTS",
+            //đọc nhật ký cuộc gọi
+            "android.permission.READ_CALL_LOG",
             "android.permission.READ_SMS",
             "android.permission.WRITE_SMS",
             "android.permission.RECEIVE_SMS",
@@ -22,9 +24,29 @@ class ApkAnalyzer(private val context: Context) {
             "android.permission.CAMERA",
             "android.permission.READ_PHONE_STATE",
             "android.permission.ACCESS_FINE_LOCATION",
-            "android.permission.ACCESS_COARSE_LOCATION"
-        )
+            "android.permission.ACCESS_COARSE_LOCATION",
+            //thêm các quyền
+            "android.permission.INSTALL_PACKAGES", //kiểm tra quyền tự động cài đặt ứng dụng
+            "android.permission.REQUEST_INSTALL_PACKAGES",
+            //đọc lịch sử trình duyệt
+            "android.permission.READ_HISTORY_BOOKMARKS",
+            //theo dõi cuộc gọi đi
+            "android.permission.PROCESS_OUTGOING_CALLS",
+            //truy cập vị trí khi chạy ngầm
+            "android.permission.ACCESS_BACKGROUND_LOCATION",
+            //quyền lấy tài khoản
+            "android.permission.GET_ACCOUNTS",
+            "android.permission.PACKAGE_USAGE_STATS", // Theo dõi việc sử dụng ứng dụng khác
+            "android.permission.BIND_ACCESSIBILITY_SERVICE", // Dịch vụ trợ năng (có thể đọc màn hình, thực hiện thao tác)
+            "android.permission.WRITE_SETTINGS", // Thay đổi cài đặt hệ
+            //đọc thông báo từ các ứng dụng trên máy
+            "android.permission.READ_NOTIFICATION_POLICY",
+            //tự khởi chạy thiết bị khi khởi động
+            "android.permission.RECEIVE_BOOT_COMPLETED",
 
+
+            )
+        //chỉnh sửa lại các api nguy hiểm
         private val SUSPICIOUS_APIS = listOf(
             "Landroid/telephony/SmsManager",
             "Landroid/telephony/TelephonyManager",
@@ -38,28 +60,28 @@ class ApkAnalyzer(private val context: Context) {
 
     fun analyzeApk(uri: Uri): List<String> {
         val results = mutableListOf<String>()
-        
+
         try {
             // Create temporary file to analyze
             val tempFile = createTempFileFromUri(uri)
-            
+
             // Analyze APK permissions
             results.addAll(analyzePermissions(tempFile.absolutePath))
-            
+
             // Analyze DEX files for suspicious API usage
             results.addAll(analyzeDexFiles(tempFile))
-            
+
             // Clean up
             tempFile.delete()
-            
+
         } catch (e: Exception) {
             results.add("Error analyzing APK: ${e.message}")
         }
-        
+
         return results
     }
 
-    private fun createTempFileFromUri(uri: Uri): File {
+    public fun createTempFileFromUri(uri: Uri): File {
         val tempFile = File.createTempFile("analysis_", ".apk", context.cacheDir)
         context.contentResolver.openInputStream(uri)?.use { input ->
             tempFile.outputStream().use { output ->
@@ -99,7 +121,7 @@ class ApkAnalyzer(private val context: Context) {
 
         try {
             val dexFile = DexFileFactory.loadDexFile(apkFile, Opcodes.getDefault())
-            
+
             for (classDef in dexFile.classes) {
                 if (containsSuspiciousAPIs(classDef)) {
                     suspiciousApisFound = true
@@ -116,6 +138,17 @@ class ApkAnalyzer(private val context: Context) {
         }
 
         return results
+    }
+    // Function to extract app name, permissions, and description from APK
+    fun extractAppInfo(apkPath: String): Triple<String, List<String>, String?> {
+        val packageInfo = context.packageManager.getPackageArchiveInfo(
+            apkPath,
+            PackageManager.GET_PERMISSIONS
+        )
+        val appName = packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString() ?: "Unknown"
+        val permissions = packageInfo?.requestedPermissions?.toList() ?: emptyList()
+        val description = packageInfo?.applicationInfo?.loadDescription(context.packageManager)?.toString()
+        return Triple(appName, permissions, description)
     }
 
     private fun containsSuspiciousAPIs(classDef: ClassDef): Boolean {
@@ -136,4 +169,4 @@ class ApkAnalyzer(private val context: Context) {
 
         return false
     }
-} 
+}

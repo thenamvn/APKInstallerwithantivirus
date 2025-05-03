@@ -25,6 +25,8 @@ import com.alphawolf.apkinstallerwithantivirus.utils.ApkAnalyzer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+//
+import com.alphawolf.apkinstallerwithantivirus.utils.GeminiApiHelper
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -61,7 +63,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupUI()
-        
+
         handleIntent(intent)
     }
 
@@ -169,22 +171,57 @@ class MainActivity : AppCompatActivity() {
 
     private fun analyzeApk(uri: Uri) {
         if (isAnalyzing) return
-        
+
         isAnalyzing = true
         binding.progressBar.visibility = View.VISIBLE
         binding.tvAnalysisResult.text = "Analyzing APK for potential threats..."
         binding.btnInstall.isEnabled = false
-        
+
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    ApkAnalyzer(applicationContext).analyzeApk(uri)
+                val tempFile = withContext(Dispatchers.IO) {
+                    ApkAnalyzer(applicationContext).createTempFileFromUri(uri)
                 }
-                
-                binding.tvAnalysisResult.text = result.joinToString("\n")
+                val apkAnalyzer = ApkAnalyzer(applicationContext)
+
+                binding.tvAnalysisResult.text = "Analyzing basic security..."
+
+                val result = withContext(Dispatchers.IO) {
+                    apkAnalyzer.analyzeApk(uri)
+                }
+                val (appName, permissions, description) = apkAnalyzer.extractAppInfo(tempFile.absolutePath)
+
+                binding.tvAnalysisResult.text = """
+                    Basic Analysis:
+                    ${result.joinToString("\n")}
+                    
+                    Analyzing with AI...
+                """.trimIndent()
+
+                // Gọi Gemini API
+                val geminiResult = try {
+                    GeminiApiHelper.analyzeWithGemini(
+                        apiKey = BuildConfig.GEMINI_API_KEY, // Lấy API key từ BuildConfig
+                        appName = appName,
+                        permissions = permissions,
+                        description = description
+                    )
+                } catch (e: Exception) {
+                    "AI analysis failed: ${e.message}"
+                }
+
+                // Hiển thị kết quả đầy đủ
+                binding.tvAnalysisResult.text = """
+                    Basic Analysis:
+                    ${result.joinToString("\n")}
+                    
+                    AI Analysis:
+                    $geminiResult
+                """.trimIndent()
+
                 isSuspiciousApk = result.any { it.contains("SUSPICIOUS", true) }
                 binding.btnInstall.isEnabled = true
-                
+
                 if (isSuspiciousApk) {
                     binding.btnInstall.text = "Install Anyway (Not Recommended)"
                     binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_alert)
@@ -192,7 +229,8 @@ class MainActivity : AppCompatActivity() {
                     binding.btnInstall.text = "Install"
                     binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_info)
                 }
-                
+
+                tempFile.delete()
             } catch (e: Exception) {
                 binding.tvAnalysisResult.text = "Error analyzing APK: ${e.message}"
                 binding.btnInstall.isEnabled = false
@@ -338,7 +376,7 @@ class InstallResultReceiver : BroadcastReceiver() {
                     "Installation failed: $message",
                     Toast.LENGTH_LONG
                 ).show()
-                 // Optional: Gửi broadcast để thông báo lỗi và có thể enable lại nút bấm trong MainActivity
+                // Optional: Gửi broadcast để thông báo lỗi và có thể enable lại nút bấm trong MainActivity
             }
         }
     }
