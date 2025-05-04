@@ -63,7 +63,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupUI()
-
+        
         handleIntent(intent)
     }
 
@@ -113,6 +113,31 @@ class MainActivity : AppCompatActivity() {
         binding.btnCancel.setOnClickListener {
             finish()
         }
+        
+        // Add a batch analysis button
+        val batchAnalysisButton = com.google.android.material.button.MaterialButton(this).apply {
+            text = "Batch Analysis"
+            layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener {
+                startActivity(android.content.Intent(context, 
+                    com.alphawolf.apkinstallerwithantivirus.batch.BatchAnalysisActivity::class.java))
+            }
+        }
+        
+        // Add the button to your layout - assuming you're using a ConstraintLayout
+        val rootLayout = binding.root as? androidx.constraintlayout.widget.ConstraintLayout
+        rootLayout?.addView(batchAnalysisButton)
+        
+        // Position the button - you'll need to adjust these constraints based on your layout
+        val params = batchAnalysisButton.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        params.topToTop = binding.btnCancel.id
+        params.endToStart = binding.btnCancel.id
+        params.bottomToBottom = binding.btnCancel.id
+        params.marginEnd = 16
+        batchAnalysisButton.layoutParams = params
     }
 
     private fun showInstallWarningDialog() {
@@ -190,7 +215,7 @@ class MainActivity : AppCompatActivity() {
                     apkAnalyzer.analyzeApk(uri)
                 }
                 val (appName, permissions, description) = apkAnalyzer.extractAppInfo(tempFile.absolutePath)
-
+                
                 binding.tvAnalysisResult.text = """
                     Basic Analysis:
                     ${result.joinToString("\n")}
@@ -209,7 +234,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     "AI analysis failed: ${e.message}"
                 }
-
+    
                 // Hiển thị kết quả đầy đủ
                 binding.tvAnalysisResult.text = """
                     Basic Analysis:
@@ -218,10 +243,10 @@ class MainActivity : AppCompatActivity() {
                     AI Analysis:
                     $geminiResult
                 """.trimIndent()
-
+                
                 isSuspiciousApk = result.any { it.contains("SUSPICIOUS", true) }
                 binding.btnInstall.isEnabled = true
-
+    
                 if (isSuspiciousApk) {
                     binding.btnInstall.text = "Install Anyway (Not Recommended)"
                     binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_alert)
@@ -229,7 +254,7 @@ class MainActivity : AppCompatActivity() {
                     binding.btnInstall.text = "Install"
                     binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_info)
                 }
-
+    
                 tempFile.delete()
             } catch (e: Exception) {
                 binding.tvAnalysisResult.text = "Error analyzing APK: ${e.message}"
@@ -376,7 +401,7 @@ class InstallResultReceiver : BroadcastReceiver() {
                     "Installation failed: $message",
                     Toast.LENGTH_LONG
                 ).show()
-                // Optional: Gửi broadcast để thông báo lỗi và có thể enable lại nút bấm trong MainActivity
+                 // Optional: Gửi broadcast để thông báo lỗi và có thể enable lại nút bấm trong MainActivity
             }
         }
     }

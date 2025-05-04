@@ -11,7 +11,8 @@ import java.io.File
 class ApkAnalyzer(private val context: Context) {
 
     companion object {
-        private val SUSPICIOUS_PERMISSIONS = listOf(
+        // private val SUSPICIOUS_PERMISSIONS = listOf(
+        val SUSPICIOUS_PERMISSIONS = listOf(
             "android.permission.SEND_SMS",
             "android.permission.CALL_PHONE",
             "android.permission.READ_CONTACTS",
@@ -25,28 +26,28 @@ class ApkAnalyzer(private val context: Context) {
             "android.permission.READ_PHONE_STATE",
             "android.permission.ACCESS_FINE_LOCATION",
             "android.permission.ACCESS_COARSE_LOCATION",
-            //thêm các quyền
-            "android.permission.INSTALL_PACKAGES", //kiểm tra quyền tự động cài đặt ứng dụng
+            //thêm các quyền 
+            "android.permission.INSTALL_PACKAGES", //kiểm tra quyền tự động cài đặt ứng dụng 
             "android.permission.REQUEST_INSTALL_PACKAGES",
-            //đọc lịch sử trình duyệt
+            //đọc lịch sử trình duyệt 
             "android.permission.READ_HISTORY_BOOKMARKS",
-            //theo dõi cuộc gọi đi
+            //theo dõi cuộc gọi đi 
             "android.permission.PROCESS_OUTGOING_CALLS",
-            //truy cập vị trí khi chạy ngầm
+            //truy cập vị trí khi chạy ngầm 
             "android.permission.ACCESS_BACKGROUND_LOCATION",
-            //quyền lấy tài khoản
+            //quyền lấy tài khoản 
             "android.permission.GET_ACCOUNTS",
             "android.permission.PACKAGE_USAGE_STATS", // Theo dõi việc sử dụng ứng dụng khác
             "android.permission.BIND_ACCESSIBILITY_SERVICE", // Dịch vụ trợ năng (có thể đọc màn hình, thực hiện thao tác)
             "android.permission.WRITE_SETTINGS", // Thay đổi cài đặt hệ
             //đọc thông báo từ các ứng dụng trên máy
             "android.permission.READ_NOTIFICATION_POLICY",
-            //tự khởi chạy thiết bị khi khởi động
+            //tự khởi chạy thiết bị khi khởi động 
             "android.permission.RECEIVE_BOOT_COMPLETED",
 
 
-            )
-        //chỉnh sửa lại các api nguy hiểm
+        )
+//chỉnh sửa lại các api nguy hiểm
         private val SUSPICIOUS_APIS = listOf(
             "Landroid/telephony/SmsManager",
             "Landroid/telephony/TelephonyManager",
@@ -60,24 +61,24 @@ class ApkAnalyzer(private val context: Context) {
 
     fun analyzeApk(uri: Uri): List<String> {
         val results = mutableListOf<String>()
-
+        
         try {
             // Create temporary file to analyze
             val tempFile = createTempFileFromUri(uri)
-
+            
             // Analyze APK permissions
             results.addAll(analyzePermissions(tempFile.absolutePath))
-
+            
             // Analyze DEX files for suspicious API usage
             results.addAll(analyzeDexFiles(tempFile))
-
+            
             // Clean up
             tempFile.delete()
-
+            
         } catch (e: Exception) {
             results.add("Error analyzing APK: ${e.message}")
         }
-
+        
         return results
     }
 
@@ -121,7 +122,7 @@ class ApkAnalyzer(private val context: Context) {
 
         try {
             val dexFile = DexFileFactory.loadDexFile(apkFile, Opcodes.getDefault())
-
+            
             for (classDef in dexFile.classes) {
                 if (containsSuspiciousAPIs(classDef)) {
                     suspiciousApisFound = true
@@ -169,4 +170,4 @@ class ApkAnalyzer(private val context: Context) {
 
         return false
     }
-}
+} 

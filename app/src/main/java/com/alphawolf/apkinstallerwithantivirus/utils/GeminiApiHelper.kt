@@ -68,7 +68,7 @@ object GeminiApiHelper {
                     .getJSONArray("parts")
                     .getJSONObject(0)
                     .getString("text")
-
+                
                 content // This will only return the AI's response, not the prompt
             } else {
                 val errorStream = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
