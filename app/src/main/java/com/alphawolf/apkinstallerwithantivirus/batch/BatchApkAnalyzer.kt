@@ -1,0 +1,311 @@
+package com.alphawolf.apkinstallerwithantivirus.batch
+
+import android.content.Context
+import android.net.Uri
+import com.alphawolf.apkinstallerwithantivirus.BuildConfig
+import com.alphawolf.apkinstallerwithantivirus.utils.ApkAnalyzer
+import com.alphawolf.apkinstallerwithantivirus.utils.GeminiApiHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Class to analyze multiple APK files in batch and export results to CSV
+ */
+class BatchApkAnalyzer(private val context: Context) {
+
+    // Risk levels enum for clarity
+    enum class RiskLevel(val label: String) {
+        SAFE("SAFE"),
+        POTENTIALLY_RISKY("POTENTIALLY_RISKY"),
+        DANGEROUS("DANGEROUS"),
+        UNKNOWN("UNKNOWN")
+    }
+
+    companion object {
+        // Map Vietnamese risk labels to enum
+        private val RISK_LEVEL_MAPPING = mapOf(
+            "AN TOÀN" to RiskLevel.SAFE,
+            "CÓ THỂ NGUY HIỂM" to RiskLevel.POTENTIALLY_RISKY,
+            "NGUY HIỂM" to RiskLevel.DANGEROUS
+        )
+    }
+
+    /**
+     * Batch analyzes APK files in a directory based on categories
+     * and generates CSV reports with results
+     */
+    suspend fun analyzeDatasetAndGenerateReport(
+        datasetRootPath: String,
+        outputPath: String
+    ): String = withContext(Dispatchers.IO) {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val outputDir = File(outputPath).apply { mkdirs() }
+        
+        // Create dataset info CSV (ground truth)
+        val datasetFile = File(outputDir, "dataset_info_$timestamp.csv")
+        val datasetEntries = scanDatasetFolder(datasetRootPath)
+        createDatasetCSV(datasetFile, datasetEntries)
+        
+        // Analyze all APKs and create results CSV
+        val resultsFile = File(outputDir, "analysis_results_$timestamp.csv")
+        analyzeBatchAndCreateResultsCSV(datasetEntries, resultsFile)
+        
+        // Generate Python script for metrics calculation
+        val pythonScript = generatePythonScript(datasetFile.absolutePath, resultsFile.absolutePath, outputDir.absolutePath)
+        File(outputDir, "calculate_metrics_$timestamp.py").writeText(pythonScript)
+        
+        // Return paths to created files
+        "Dataset: ${datasetFile.absolutePath}\nResults: ${resultsFile.absolutePath}"
+    }
+    
+    /**
+     * Scans dataset directory and returns all APK files with their ground truth labels
+     */
+    private fun scanDatasetFolder(rootPath: String): List<DatasetEntry> {
+        val root = File(rootPath)
+        if (!root.exists() || !root.isDirectory) {
+            throw IllegalArgumentException("Invalid dataset directory: $rootPath")
+        }
+        
+        val entries = mutableListOf<DatasetEntry>()
+        
+        // Each subdirectory is a category (safe, malware, etc)
+        root.listFiles { file -> file.isDirectory }?.forEach { categoryDir ->
+            val groundTruthLabel = categoryDir.name.uppercase()
+            
+            // Get all APK files in this category
+            categoryDir.listFiles { file -> file.name.endsWith(".apk", ignoreCase = true) }?.forEach { apkFile ->
+                entries.add(DatasetEntry(
+                    apkPath = apkFile.absolutePath,
+                    fileName = apkFile.name,
+                    groundTruthLabel = groundTruthLabel,
+                    fileSizeKB = apkFile.length() / 1024
+                ))
+            }
+        }
+        
+        return entries
+    }
+    
+    /**
+     * Creates CSV file with dataset information
+     */
+    private fun createDatasetCSV(file: File, entries: List<DatasetEntry>) {
+        FileWriter(file).use { writer ->
+            writer.append("APK_PATH,FILENAME,GROUND_TRUTH_LABEL,FILE_SIZE_KB\n")
+            
+            entries.forEach { entry ->
+                writer.append("${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},${entry.fileSizeKB}\n")
+            }
+        }
+    }
+    
+    /**
+     * Analyzes all APKs in the dataset and creates a results CSV
+     */
+    private suspend fun analyzeBatchAndCreateResultsCSV(
+        entries: List<DatasetEntry>,
+        resultsFile: File
+    ) = withContext(Dispatchers.IO) {
+        FileWriter(resultsFile).use { writer ->
+            writer.append("APK_PATH,FILENAME,GROUND_TRUTH_LABEL,PREDICTED_LABEL,AI_RISK_LEVEL,")
+                .append("DANGEROUS_PERMISSIONS,ANALYSIS_SUMMARY\n")
+            
+            // Process in batches of 3 to avoid overwhelming the system
+            val batchSize = 3
+            val total = entries.size
+            
+            for (i in entries.indices step batchSize) {
+                val endIndex = minOf(i + batchSize, entries.size)
+                val batch = entries.subList(i, endIndex)
+                
+                // Process batch concurrently
+                val batchResults = batch.map { entry ->
+                    async(Dispatchers.IO) {
+                        val result = analyzeApk(entry.apkPath)
+                        val csvLine = "${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},"
+                            .plus("${result.predictedLabel},${result.riskLevel.label},")
+                            .plus("\"${result.dangerousPermissions.joinToString(";")}\",")
+                            .plus("\"${result.summary.replace("\"", "'").replace("\n", " ")}\"")
+                        
+                        println("Processed ${entries.indexOf(entry) + 1}/$total: ${entry.fileName}")
+                        csvLine
+                    }
+                }.awaitAll()
+                
+                // Write batch results to CSV
+                batchResults.forEach { line ->
+                    writer.append(line).append('\n')
+                }
+            }
+        }
+    }
+    
+    /**
+     * Analyzes a single APK file and returns the analysis result
+     */
+    private suspend fun analyzeApk(apkPath: String): AnalysisResult = withContext(Dispatchers.IO) {
+        val analyzer = ApkAnalyzer(context)
+        val apkFile = File(apkPath)
+        val uri = Uri.fromFile(apkFile)
+        
+        // Create temporary file for analysis
+        val tempFile = analyzer.createTempFileFromUri(uri)
+        
+        try {
+            // Extract app info (name, permissions)
+            val (appName, permissions, description) = analyzer.extractAppInfo(tempFile.absolutePath)
+            
+            // Identify dangerous permissions
+            val dangerousPermissions = permissions.filter { permission ->
+                ApkAnalyzer.SUSPICIOUS_PERMISSIONS.any { 
+                    permission.contains(it.replace("android.permission.", ""), ignoreCase = true) 
+                }
+            }
+            
+            // Analyze with Gemini AI
+            val aiAnalysisResult = GeminiApiHelper.analyzeWithGemini(
+                apiKey = BuildConfig.GEMINI_API_KEY,
+                appName = appName,
+                permissions = permissions,
+                description = description
+            )
+            
+            // Extract risk level from AI analysis
+            val riskLevel = extractRiskLevel(aiAnalysisResult)
+            
+            // Map risk level to predicted label
+            val predictedLabel = when(riskLevel) {
+                RiskLevel.DANGEROUS -> "MALWARE"
+                RiskLevel.POTENTIALLY_RISKY -> "SUSPICIOUS" 
+                RiskLevel.SAFE -> "SAFE"
+                else -> "UNKNOWN"
+            }
+            
+            AnalysisResult(
+                predictedLabel = predictedLabel,
+                riskLevel = riskLevel,
+                dangerousPermissions = dangerousPermissions,
+                summary = aiAnalysisResult
+            )
+        } finally {
+            // Clean up temporary file
+            tempFile.delete()
+        }
+    }
+    
+    /**
+     * Extracts risk level from AI analysis text
+     */
+    private fun extractRiskLevel(analysisText: String): RiskLevel {
+        return RISK_LEVEL_MAPPING.entries.find { 
+            analysisText.contains(it.key, ignoreCase = true)
+        }?.value ?: RiskLevel.UNKNOWN
+    }
+    
+    /**
+     * Generates Python script for metrics calculation
+     */
+    private fun generatePythonScript(
+        datasetPath: String, 
+        resultsPath: String,
+        outputDir: String
+    ): String {
+        return """
+            import pandas as pd
+            import numpy as np
+            from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+            
+            # Load data
+            dataset_df = pd.read_csv("$datasetPath")
+            results_df = pd.read_csv("$resultsPath")
+            
+            # Calculate metrics
+            y_true = results_df['GROUND_TRUTH_LABEL']
+            y_pred = results_df['PREDICTED_LABEL']
+            
+            # Basic metrics
+            accuracy = accuracy_score(y_true, y_pred)
+            
+            # Handle binary and multi-class situations
+            unique_labels = np.unique(np.concatenate([y_true, y_pred]))
+            is_binary = len([l for l in unique_labels if l in ['MALWARE', 'SAFE']]) == 2
+            
+            if is_binary:
+                precision = precision_score(y_true, y_pred, pos_label='MALWARE')
+                recall = recall_score(y_true, y_pred, pos_label='MALWARE')
+                f1 = f1_score(y_true, y_pred, pos_label='MALWARE')
+            else:
+                # Multi-class metrics (macro average)
+                precision = precision_score(y_true, y_pred, average='macro')
+                recall = recall_score(y_true, y_pred, average='macro')
+                f1 = f1_score(y_true, y_pred, average='macro')
+            
+            # Generate report
+            print(f"Accuracy: {accuracy:.4f}")
+            print(f"Precision: {precision:.4f}")
+            print(f"Recall: {recall:.4f}")
+            print(f"F1 Score: {f1:.4f}")
+            
+            print("\nClassification Report:")
+            print(classification_report(y_true, y_pred))
+            
+            # Create confusion matrix
+            cm = confusion_matrix(y_true, y_pred)
+            plt.figure(figsize=(10, 8))
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                        xticklabels=unique_labels,
+                        yticklabels=unique_labels)
+            plt.title('Confusion Matrix')
+            plt.xlabel('Predicted')
+            plt.ylabel('Actual')
+            plt.tight_layout()
+            plt.savefig("$outputDir/confusion_matrix.png")
+            
+            # Export misclassified samples
+            errors_df = results_df[results_df['GROUND_TRUTH_LABEL'] != results_df['PREDICTED_LABEL']]
+            errors_df.to_csv("$outputDir/misclassified_apks.csv", index=False)
+            
+            print(f"\nMisclassified samples: {len(errors_df)}/{len(results_df)} ({len(errors_df)/len(results_df)*100:.2f}%)")
+            
+            # Summary file
+            with open("$outputDir/metrics_summary.txt", "w") as f:
+                f.write(f"APK Malware Detection Evaluation\n")
+                f.write(f"============================\n\n")
+                f.write(f"Dataset: {len(results_df)} APK files\n")
+                f.write(f"Distribution: {dict(y_true.value_counts())}\n\n")
+                f.write(f"Accuracy: {accuracy:.4f}\n")
+                f.write(f"Precision: {precision:.4f}\n")
+                f.write(f"Recall: {recall:.4f}\n")
+                f.write(f"F1 Score: {f1:.4f}\n\n")
+                f.write("Classification Report:\n")
+                f.write(classification_report(y_true, y_pred))
+            
+            print(f"\nResults saved to: {outputDir}")
+        """.trimIndent()
+    }
+    
+    // Data classes to represent dataset entries and analysis results
+    data class DatasetEntry(
+        val apkPath: String,
+        val fileName: String,
+        val groundTruthLabel: String,
+        val fileSizeKB: Long
+    )
+    
+    data class AnalysisResult(
+        val predictedLabel: String,
+        val riskLevel: RiskLevel,
+        val dangerousPermissions: List<String>,
+        val summary: String
+    )
+}
