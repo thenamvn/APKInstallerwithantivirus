@@ -47,24 +47,99 @@ class BatchApkAnalyzer(private val context: Context) {
     ): String = withContext(Dispatchers.IO) {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val outputDir = File(outputPath).apply { mkdirs() }
-        
-        // Create dataset info CSV (ground truth)
-        val datasetFile = File(outputDir, "dataset_info_$timestamp.csv")
-        val datasetEntries = scanDatasetFolder(datasetRootPath)
-        createDatasetCSV(datasetFile, datasetEntries)
-        
-        // Analyze all APKs and create results CSV
-        val resultsFile = File(outputDir, "analysis_results_$timestamp.csv")
-        analyzeBatchAndCreateResultsCSV(datasetEntries, resultsFile)
-        
-        // Generate Python script for metrics calculation
-        val pythonScript = generatePythonScript(datasetFile.absolutePath, resultsFile.absolutePath, outputDir.absolutePath)
-        File(outputDir, "calculate_metrics_$timestamp.py").writeText(pythonScript)
-        
-        // Return paths to created files
-        "Dataset: ${datasetFile.absolutePath}\nResults: ${resultsFile.absolutePath}"
+
+        try {
+            // Quét thư mục và kiểm tra cấu trúc TRƯỚC KHI tạo tệp
+            val datasetEntries = scanDatasetFolder(datasetRootPath)
+
+            if (datasetEntries.isEmpty()) {
+                return@withContext "Không tìm thấy APK trong thư mục dataset. " +
+                        "Vui lòng kiểm tra cấu trúc thư mục (yêu cầu thư mục safe và malware) " +
+                        "và đảm bảo đã đặt các file APK vào thư mục tương ứng."
+            }
+
+            // Phân tích các APK và chuẩn bị dữ liệu kết quả (TRƯỚC KHI tạo file)
+            val analysisResults = analyzeBatch(datasetEntries)
+
+            if (analysisResults.isEmpty()) {
+                return@withContext "Không thể phân tích APK. Vui lòng kiểm tra kết nối mạng và API key Gemini."
+            }
+
+            // Sau khi phân tích thành công, tạo các tệp CSV
+            val datasetFile = File(outputDir, "dataset_info_$timestamp.csv")
+            createDatasetCSV(datasetFile, datasetEntries)
+
+            val resultsFile = File(outputDir, "analysis_results_$timestamp.csv")
+            createResultsCSV(resultsFile, datasetEntries, analysisResults)
+
+            // Tạo Python script chỉ khi có dữ liệu phân tích
+            val pythonScript = generatePythonScript(datasetFile.absolutePath, resultsFile.absolutePath, outputDir.absolutePath)
+            File(outputDir, "calculate_metrics_$timestamp.py").writeText(pythonScript)
+
+            return@withContext "Phân tích hoàn tất!\n" +
+                    "Đã phân tích: ${datasetEntries.size} APK\n" +
+                    "Dataset: ${datasetFile.absolutePath}\n" +
+                    "Kết quả: ${resultsFile.absolutePath}"
+        } catch (e: Exception) {
+            return@withContext "Lỗi: ${e.message}"
+        }
     }
-    
+
+    // Phương thức mới để tách phần phân tích APK từ việc ghi file
+    private suspend fun analyzeBatch(
+        entries: List<DatasetEntry>
+    ): Map<String, AnalysisResult> = withContext(Dispatchers.IO) {
+        val results = mutableMapOf<String, AnalysisResult>()
+
+        // Xử lý theo lô để tránh quá tải hệ thống
+        val batchSize = 3
+        val total = entries.size
+
+        for (i in entries.indices step batchSize) {
+            val endIndex = minOf(i + batchSize, entries.size)
+            val batch = entries.subList(i, endIndex)
+
+            // Xử lý đồng thời trong lô
+            val batchResults = batch.map { entry ->
+                async(Dispatchers.IO) {
+                    try {
+                        val result = analyzeApk(entry.apkPath)
+                        println("Đã xử lý ${entries.indexOf(entry) + 1}/$total: ${entry.fileName}")
+                        entry.apkPath to result
+                    } catch (e: Exception) {
+                        println("Lỗi phân tích ${entry.fileName}: ${e.message}")
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull().toMap()
+
+            results.putAll(batchResults)
+        }
+
+        return@withContext results
+    }
+
+    // Phương thức mới để tạo file CSV kết quả sau khi đã có phân tích thành công
+    private fun createResultsCSV(
+        file: File,
+        entries: List<DatasetEntry>,
+        results: Map<String, AnalysisResult>
+    ) {
+        FileWriter(file).use { writer ->
+            writer.append("APK_PATH,FILENAME,GROUND_TRUTH_LABEL,PREDICTED_LABEL,AI_RISK_LEVEL,")
+                .append("DANGEROUS_PERMISSIONS,ANALYSIS_SUMMARY\n")
+
+            entries.forEach { entry ->
+                val result = results[entry.apkPath] ?: return@forEach
+                val csvLine = "${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},"
+                    .plus("${result.predictedLabel},${result.riskLevel.label},")
+                    .plus("\"${result.dangerousPermissions.joinToString(";")}\",")
+                    .plus("\"${result.summary.replace("\"", "'").replace("\n", " ")}\"")
+
+                writer.append(csvLine).append('\n')
+            }
+        }
+    }
     /**
      * Scans dataset directory and returns all APK files with their ground truth labels
      */
@@ -73,13 +148,13 @@ class BatchApkAnalyzer(private val context: Context) {
         if (!root.exists() || !root.isDirectory) {
             throw IllegalArgumentException("Invalid dataset directory: $rootPath")
         }
-        
+
         val entries = mutableListOf<DatasetEntry>()
-        
+
         // Each subdirectory is a category (safe, malware, etc)
         root.listFiles { file -> file.isDirectory }?.forEach { categoryDir ->
             val groundTruthLabel = categoryDir.name.uppercase()
-            
+
             // Get all APK files in this category
             categoryDir.listFiles { file -> file.name.endsWith(".apk", ignoreCase = true) }?.forEach { apkFile ->
                 entries.add(DatasetEntry(
@@ -90,64 +165,23 @@ class BatchApkAnalyzer(private val context: Context) {
                 ))
             }
         }
-        
+
         return entries
     }
-    
+
     /**
      * Creates CSV file with dataset information
      */
     private fun createDatasetCSV(file: File, entries: List<DatasetEntry>) {
         FileWriter(file).use { writer ->
             writer.append("APK_PATH,FILENAME,GROUND_TRUTH_LABEL,FILE_SIZE_KB\n")
-            
+
             entries.forEach { entry ->
                 writer.append("${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},${entry.fileSizeKB}\n")
             }
         }
     }
-    
-    /**
-     * Analyzes all APKs in the dataset and creates a results CSV
-     */
-    private suspend fun analyzeBatchAndCreateResultsCSV(
-        entries: List<DatasetEntry>,
-        resultsFile: File
-    ) = withContext(Dispatchers.IO) {
-        FileWriter(resultsFile).use { writer ->
-            writer.append("APK_PATH,FILENAME,GROUND_TRUTH_LABEL,PREDICTED_LABEL,AI_RISK_LEVEL,")
-                .append("DANGEROUS_PERMISSIONS,ANALYSIS_SUMMARY\n")
-            
-            // Process in batches of 3 to avoid overwhelming the system
-            val batchSize = 3
-            val total = entries.size
-            
-            for (i in entries.indices step batchSize) {
-                val endIndex = minOf(i + batchSize, entries.size)
-                val batch = entries.subList(i, endIndex)
-                
-                // Process batch concurrently
-                val batchResults = batch.map { entry ->
-                    async(Dispatchers.IO) {
-                        val result = analyzeApk(entry.apkPath)
-                        val csvLine = "${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},"
-                            .plus("${result.predictedLabel},${result.riskLevel.label},")
-                            .plus("\"${result.dangerousPermissions.joinToString(";")}\",")
-                            .plus("\"${result.summary.replace("\"", "'").replace("\n", " ")}\"")
-                        
-                        println("Processed ${entries.indexOf(entry) + 1}/$total: ${entry.fileName}")
-                        csvLine
-                    }
-                }.awaitAll()
-                
-                // Write batch results to CSV
-                batchResults.forEach { line ->
-                    writer.append(line).append('\n')
-                }
-            }
-        }
-    }
-    
+
     /**
      * Analyzes a single APK file and returns the analysis result
      */
@@ -155,21 +189,21 @@ class BatchApkAnalyzer(private val context: Context) {
         val analyzer = ApkAnalyzer(context)
         val apkFile = File(apkPath)
         val uri = Uri.fromFile(apkFile)
-        
+
         // Create temporary file for analysis
         val tempFile = analyzer.createTempFileFromUri(uri)
-        
+
         try {
             // Extract app info (name, permissions)
             val (appName, permissions, description) = analyzer.extractAppInfo(tempFile.absolutePath)
-            
+
             // Identify dangerous permissions
             val dangerousPermissions = permissions.filter { permission ->
-                ApkAnalyzer.SUSPICIOUS_PERMISSIONS.any { 
-                    permission.contains(it.replace("android.permission.", ""), ignoreCase = true) 
+                ApkAnalyzer.SUSPICIOUS_PERMISSIONS.any {
+                    permission.contains(it.replace("android.permission.", ""), ignoreCase = true)
                 }
             }
-            
+
             // Analyze with Gemini AI
             val aiAnalysisResult = GeminiApiHelper.analyzeWithGemini(
                 apiKey = BuildConfig.GEMINI_API_KEY,
@@ -177,18 +211,18 @@ class BatchApkAnalyzer(private val context: Context) {
                 permissions = permissions,
                 description = description
             )
-            
+
             // Extract risk level from AI analysis
             val riskLevel = extractRiskLevel(aiAnalysisResult)
-            
+
             // Map risk level to predicted label
             val predictedLabel = when(riskLevel) {
                 RiskLevel.DANGEROUS -> "MALWARE"
-                RiskLevel.POTENTIALLY_RISKY -> "SUSPICIOUS" 
+                RiskLevel.POTENTIALLY_RISKY -> "SUSPICIOUS"
                 RiskLevel.SAFE -> "SAFE"
                 else -> "UNKNOWN"
             }
-            
+
             AnalysisResult(
                 predictedLabel = predictedLabel,
                 riskLevel = riskLevel,
@@ -200,21 +234,33 @@ class BatchApkAnalyzer(private val context: Context) {
             tempFile.delete()
         }
     }
-    
+
     /**
      * Extracts risk level from AI analysis text
      */
     private fun extractRiskLevel(analysisText: String): RiskLevel {
-        return RISK_LEVEL_MAPPING.entries.find { 
-            analysisText.contains(it.key, ignoreCase = true)
-        }?.value ?: RiskLevel.UNKNOWN
+        // return RISK_LEVEL_MAPPING.entries.find {
+        //     analysisText.contains(it.key, ignoreCase = true)
+        // }?.value ?: RiskLevel.UNKNOWN
+        if (analysisText.contains("NGUY HIỂM", ignoreCase = true)) {
+            return RiskLevel.DANGEROUS
+        }
+
+        else if (analysisText.contains("AN TOÀN", ignoreCase = true) &&
+            !analysisText.contains("QUYỀN ĐÁNG NGỜ:", ignoreCase = true)) {
+            return RiskLevel.SAFE
+        }
+
+        else {
+            return RiskLevel.POTENTIALLY_RISKY
+        }
     }
-    
+
     /**
      * Generates Python script for metrics calculation
      */
     private fun generatePythonScript(
-        datasetPath: String, 
+        datasetPath: String,
         resultsPath: String,
         outputDir: String
     ): String {
@@ -293,7 +339,7 @@ class BatchApkAnalyzer(private val context: Context) {
             print(f"\nResults saved to: {outputDir}")
         """.trimIndent()
     }
-    
+
     // Data classes to represent dataset entries and analysis results
     data class DatasetEntry(
         val apkPath: String,
@@ -301,7 +347,7 @@ class BatchApkAnalyzer(private val context: Context) {
         val groundTruthLabel: String,
         val fileSizeKB: Long
     )
-    
+
     data class AnalysisResult(
         val predictedLabel: String,
         val riskLevel: RiskLevel,
