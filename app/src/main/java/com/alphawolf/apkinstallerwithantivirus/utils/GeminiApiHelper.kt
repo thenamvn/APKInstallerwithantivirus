@@ -28,19 +28,29 @@ object GeminiApiHelper {
             QUYỀN TRUY CẬP: ${permissions.joinToString(", ")}
             ${if (!description.isNullOrBlank()) "MÔ TẢ: $description" else ""}
             
-            Hãy phân tích mức độ an toàn của ứng dụng này dựa trên tên và quyền truy cập nó yêu cầu.
+            Dựa trên kiến thức của bạn về các ứng dụng di động phổ biến, hãy xác định:
             
-            Yêu cầu:
-            1. Xác định xem các quyền yêu cầu có phù hợp với chức năng mà ứng dụng có thể thực hiện dựa trên tên của nó không
-            2. Xác định bất kỳ quyền nguy hiểm nào có thể bị lạm dụng
-            3. Đưa ra đánh giá rủi ro trong MỘT trong các danh mục sau: AN TOÀN, CÓ THỂ NGUY HIỂM, hoặc NGUY HIỂM
-            4. Đưa ra lời giải thích ngắn gọn, tập trung vào các quyền đáng lo ngại nhất
-            5. Phản hồi ngắn gọn nhưng đầy đủ thông tin, tránh dài dòng
+            1. Liệu tên và mô tả ứng dụng có phù hợp với một ứng dụng chính thống hoặc đã biết không
+            2. Liệu các quyền yêu cầu có phù hợp với loại ứng dụng này không
+            3. Liệu có quyền nào KHÔNG cần thiết cho chức năng cốt lõi của ứng dụng này không
+            
+            Lưu ý:
+            - Số lượng quyền không phải là yếu tố quyết định; nhiều ứng dụng hợp pháp cần nhiều quyền
+            - Các ứng dụng yêu cầu ít quyền, đặc biệt là quyền nguy hiểm thì thường đa số là an toàn
+            - Ứng dụng camera cần quyền camera, ứng dụng bản đồ cần quyền vị trí, v.v. là bình thường
+            - Kết hợp bất thường của các quyền mới đáng ngờ (ví dụ: ứng dụng đèn pin yêu cầu quyền SMS)
+            - Một vài quyền nguy hiểm không nhất thiết có nghĩa là ứng dụng độc hại
+            - [1] : Các ứng dụng chơi game hay ứng dụng mạng xã hội hoặc ứng dụng liên quan đến chụp ảnh, chỉnh sửa ảnh thường yêu cầu các quyền như quyền truy cập bộ nhớ (chẳng hạn như READ_MEDIA_AUDIO,READ_MEDIA_VIDEO,READ_MEDIA_IMAGES), ứng dụng game có thể yêu cầu cái đấy để share lại thành tích chơi game bằng cách lưu ảnh thành tích game vào bộ nhớ chẳng hạn. Do đó đa số không nguy hiểm
+            - Các ứng dụng kiểu như [1], có thể dùng quyền READ_MEDIA_AUDIO,READ_MEDIA_VIDEO,READ_MEDIA_IMAGES để render đồ họa như hiệu ứng game, đồ họa hình ảnh từ data game lưu trong bộ nhớ. WRITE_EXTERNAL_STORAGE ứng dụng có thể dùng để lưu dữ liệu userdata của game hay ứng dụng vào bộ nhớ. Do đó đa số thường không nguy hiểm
+            
+            Hãy đánh giá và phân loại ứng dụng vào MỘT trong hai nhóm:
+            AN TOÀN: Nếu tên ứng dụng có vẻ chính thống và các quyền phù hợp với chức năng
+            NGUY HIỂM: Nếu có dấu hiệu đáng ngờ rõ ràng (tên không rõ ràng, quyền không phù hợp)
             
             Định dạng phản hồi của bạn như sau:
-            MỨC ĐỘ RỦI RO: [mức độ]
-            PHÂN TÍCH: [giải thích ngắn gọn]
-            CÁC VẤN ĐỀ CHÍNH: [danh sách các quyền đáng lo ngại nhất]
+            MỨC ĐỘ RỦI RO: [AN TOÀN/NGUY HIỂM]
+            PHÂN TÍCH: [giải thích ngắn gọn về lý do đánh giá, đặc biệt là mối liên hệ giữa tên ứng dụng và các quyền]
+            CÁC VẤN ĐỀ CHÍNH: [nếu có, liệt kê các quyền không phù hợp với chức năng dự kiến của ứng dụng]
             
             Trả lời hoàn toàn bằng tiếng Việt.
         """.trimIndent()

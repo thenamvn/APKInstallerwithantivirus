@@ -23,7 +23,6 @@ class BatchApkAnalyzer(private val context: Context) {
     // Risk levels enum for clarity
     enum class RiskLevel(val label: String) {
         SAFE("SAFE"),
-        POTENTIALLY_RISKY("POTENTIALLY_RISKY"),
         DANGEROUS("DANGEROUS"),
         UNKNOWN("UNKNOWN")
     }
@@ -32,7 +31,6 @@ class BatchApkAnalyzer(private val context: Context) {
         // Map Vietnamese risk labels to enum
         private val RISK_LEVEL_MAPPING = mapOf(
             "AN TOÀN" to RiskLevel.SAFE,
-            "CÓ THỂ NGUY HIỂM" to RiskLevel.POTENTIALLY_RISKY,
             "NGUY HIỂM" to RiskLevel.DANGEROUS
         )
     }
@@ -218,7 +216,6 @@ class BatchApkAnalyzer(private val context: Context) {
             // Map risk level to predicted label
             val predictedLabel = when(riskLevel) {
                 RiskLevel.DANGEROUS -> "MALWARE"
-                RiskLevel.POTENTIALLY_RISKY -> "SUSPICIOUS"
                 RiskLevel.SAFE -> "SAFE"
                 else -> "UNKNOWN"
             }
@@ -236,23 +233,13 @@ class BatchApkAnalyzer(private val context: Context) {
     }
 
     /**
-     * Extracts risk level from AI analysis text
-     */
+    * Extracts risk level from AI analysis text
+    */
     private fun extractRiskLevel(analysisText: String): RiskLevel {
-        // return RISK_LEVEL_MAPPING.entries.find {
-        //     analysisText.contains(it.key, ignoreCase = true)
-        // }?.value ?: RiskLevel.UNKNOWN
-        if (analysisText.contains("NGUY HIỂM", ignoreCase = true)) {
-            return RiskLevel.DANGEROUS
-        }
-
-        else if (analysisText.contains("AN TOÀN", ignoreCase = true) &&
-            !analysisText.contains("QUYỀN ĐÁNG NGỜ:", ignoreCase = true)) {
-            return RiskLevel.SAFE
-        }
-
-        else {
-            return RiskLevel.POTENTIALLY_RISKY
+        return if (analysisText.contains("NGUY HIỂM", ignoreCase = true)) {
+            RiskLevel.DANGEROUS
+        } else {
+            RiskLevel.SAFE
         }
     }
 
@@ -282,19 +269,10 @@ class BatchApkAnalyzer(private val context: Context) {
             # Basic metrics
             accuracy = accuracy_score(y_true, y_pred)
             
-            # Handle binary and multi-class situations
-            unique_labels = np.unique(np.concatenate([y_true, y_pred]))
-            is_binary = len([l for l in unique_labels if l in ['MALWARE', 'SAFE']]) == 2
-            
-            if is_binary:
-                precision = precision_score(y_true, y_pred, pos_label='MALWARE')
-                recall = recall_score(y_true, y_pred, pos_label='MALWARE')
-                f1 = f1_score(y_true, y_pred, pos_label='MALWARE')
-            else:
-                # Multi-class metrics (macro average)
-                precision = precision_score(y_true, y_pred, average='macro')
-                recall = recall_score(y_true, y_pred, average='macro')
-                f1 = f1_score(y_true, y_pred, average='macro')
+            # Chỉ xử lý binary classification (SAFE vs MALWARE)
+            precision = precision_score(y_true, y_pred, pos_label='MALWARE')
+            recall = recall_score(y_true, y_pred, pos_label='MALWARE')
+            f1 = f1_score(y_true, y_pred, pos_label='MALWARE')
             
             # Generate report
             print(f"Accuracy: {accuracy:.4f}")
@@ -309,8 +287,8 @@ class BatchApkAnalyzer(private val context: Context) {
             cm = confusion_matrix(y_true, y_pred)
             plt.figure(figsize=(10, 8))
             sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                        xticklabels=unique_labels,
-                        yticklabels=unique_labels)
+                        xticklabels=['SAFE', 'MALWARE'],
+                        yticklabels=['SAFE', 'MALWARE'])
             plt.title('Confusion Matrix')
             plt.xlabel('Predicted')
             plt.ylabel('Actual')
