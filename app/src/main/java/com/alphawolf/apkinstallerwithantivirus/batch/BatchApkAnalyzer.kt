@@ -193,7 +193,11 @@ class BatchApkAnalyzer(private val context: Context) {
 
         try {
             // Extract app info (name, permissions)
-            val (appName, permissions, description) = analyzer.extractAppInfo(tempFile.absolutePath)
+            val appInfo = analyzer.extractAppInfo(tempFile.absolutePath)
+            val appName = appInfo.appName
+            val packageName = appInfo.packageName
+            val permissions = appInfo.permissions
+            val description = appInfo.description
 
             // Identify dangerous permissions
             val dangerousPermissions = permissions.filter { permission ->
@@ -206,6 +210,7 @@ class BatchApkAnalyzer(private val context: Context) {
             val aiAnalysisResult = GeminiApiHelper.analyzeWithGemini(
                 apiKey = BuildConfig.GEMINI_API_KEY,
                 appName = appName,
+                packageName = packageName,
                 permissions = permissions,
                 description = description
             )
@@ -297,8 +302,7 @@ class BatchApkAnalyzer(private val context: Context) {
             
             # Export misclassified samples
             errors_df = results_df[results_df['GROUND_TRUTH_LABEL'] != results_df['PREDICTED_LABEL']]
-            errors_df.to_csv("$outputDir/misclassified_apks.csv", index=False)
-            
+            errors_df.to_csv(f"{outputDir}/misclassified_apks.csv", index=False)
             print(f"\nMisclassified samples: {len(errors_df)}/{len(results_df)} ({len(errors_df)/len(results_df)*100:.2f}%)")
             
             # Summary file
@@ -314,7 +318,7 @@ class BatchApkAnalyzer(private val context: Context) {
                 f.write("Classification Report:\n")
                 f.write(classification_report(y_true, y_pred))
             
-            print(f"\nResults saved to: {outputDir}")
+            print(f"\nResults saved to: $outputDir")
         """.trimIndent()
     }
 

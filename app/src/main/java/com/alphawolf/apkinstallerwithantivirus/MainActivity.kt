@@ -214,7 +214,11 @@ class MainActivity : AppCompatActivity() {
                 val result = withContext(Dispatchers.IO) {
                     apkAnalyzer.analyzeApk(uri)
                 }
-                val (appName, permissions, description) = apkAnalyzer.extractAppInfo(tempFile.absolutePath)
+                val appInfo = apkAnalyzer.extractAppInfo(tempFile.absolutePath)
+                val appName = appInfo.appName
+                val packageName = appInfo.packageName
+                val permissions = appInfo.permissions
+                val description = appInfo.description
                 
                 binding.tvAnalysisResult.text = """
                     Basic Analysis:
@@ -228,6 +232,7 @@ class MainActivity : AppCompatActivity() {
                     GeminiApiHelper.analyzeWithGemini(
                         apiKey = BuildConfig.GEMINI_API_KEY, // Lấy API key từ BuildConfig
                         appName = appName,
+                        packageName = packageName,
                         permissions = permissions,
                         description = description
                     )
@@ -405,4 +410,4 @@ class InstallResultReceiver : BroadcastReceiver() {
             }
         }
     }
-} 
+}

@@ -9,7 +9,12 @@ import org.jf.dexlib2.iface.ClassDef
 import java.io.File
 
 class ApkAnalyzer(private val context: Context) {
-
+    data class AppInfo(
+        val appName: String,
+        val packageName: String,
+        val permissions: List<String>,
+        val description: String?
+    )
     companion object {
         // private val SUSPICIOUS_PERMISSIONS = listOf(
         val SUSPICIOUS_PERMISSIONS = listOf(
@@ -141,7 +146,7 @@ class ApkAnalyzer(private val context: Context) {
         return results
     }
     // Function to extract app name, permissions, and description from APK
-    fun extractAppInfo(apkPath: String): Triple<String, List<String>, String?> {
+    fun extractAppInfo(apkPath: String): AppInfo {
         val packageInfo = context.packageManager.getPackageArchiveInfo(
             apkPath,
             PackageManager.GET_PERMISSIONS
@@ -149,7 +154,8 @@ class ApkAnalyzer(private val context: Context) {
         val appName = packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString() ?: "Unknown"
         val permissions = packageInfo?.requestedPermissions?.toList() ?: emptyList()
         val description = packageInfo?.applicationInfo?.loadDescription(context.packageManager)?.toString()
-        return Triple(appName, permissions, description)
+        val packageName = packageInfo?.packageName ?: "Unknown"
+        return AppInfo(appName, packageName, permissions, description)
     }
 
     private fun containsSuspiciousAPIs(classDef: ClassDef): Boolean {
@@ -170,4 +176,4 @@ class ApkAnalyzer(private val context: Context) {
 
         return false
     }
-} 
+}
