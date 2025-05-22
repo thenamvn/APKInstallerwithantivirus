@@ -194,7 +194,7 @@ class BatchApkAnalyzer(private val context: Context) {
         try {
             // Extract app info (name, permissions)
             val appInfo = analyzer.extractAppInfo(tempFile.absolutePath)
-            val appName = appInfo.appName
+            val appName = appInfo.appName 
             val packageName = appInfo.packageName
             val permissions = appInfo.permissions
             val description = appInfo.description
@@ -220,9 +220,8 @@ class BatchApkAnalyzer(private val context: Context) {
 
             // Map risk level to predicted label
             val predictedLabel = when(riskLevel) {
-                RiskLevel.DANGEROUS -> "MALWARE"
+                RiskLevel.DANGEROUS, RiskLevel.UNKNOWN -> "MALWARE"
                 RiskLevel.SAFE -> "SAFE"
-                else -> "UNKNOWN"
             }
 
             AnalysisResult(
@@ -241,13 +240,39 @@ class BatchApkAnalyzer(private val context: Context) {
     * Extracts risk level from AI analysis text
     */
     private fun extractRiskLevel(analysisText: String): RiskLevel {
-        return if (analysisText.contains("NGUY HIỂM", ignoreCase = true)) {
-            RiskLevel.DANGEROUS
-        } else {
-            RiskLevel.SAFE
+        // Tìm kiếm theo định dạng chuẩn 
+        val riskPattern = """MỨC\s+ĐỘ\s+RỦI\s+RO:\s*(AN\s+TOÀN|NGUY\s+HIỂM)""".toRegex(RegexOption.IGNORE_CASE)
+        val matchResult = riskPattern.find(analysisText)
+        
+        if (matchResult != null) {
+            val riskText = matchResult.groupValues[1].replace("\\s+".toRegex(), " ").trim()
+            return when {
+                riskText.equals("AN TOÀN", ignoreCase = true) -> RiskLevel.SAFE
+                else -> RiskLevel.DANGEROUS // Changed from returning UNKNOWN to DANGEROUS
+            }
+        }
+        
+        // Phương pháp dự phòng: kiểm tra từng phần trong phản hồi
+        val lines = analysisText.split("\n")
+        for (line in lines) {
+            if (line.contains("MỨC ĐỘ RỦI RO:", ignoreCase = true) || 
+                line.contains("ĐÁNH GIÁ:", ignoreCase = true)) {
+                return when {
+                    line.contains("AN TOÀN", ignoreCase = true) -> RiskLevel.SAFE
+                    else -> RiskLevel.DANGEROUS 
+                }
+            }
+        }
+        
+        // Nếu không tìm thấy định dạng chuẩn, kiểm tra phần còn lại của văn bản
+        return when {
+            analysisText.contains("AN TOÀN", ignoreCase = true) &&
+            !analysisText.contains("KHÔNG AN TOÀN", ignoreCase = true) &&
+            !analysisText.contains("NGUY HIỂM", ignoreCase = true) -> RiskLevel.SAFE
+            
+            else -> RiskLevel.DANGEROUS // Changed from checking for "NGUY HIỂM" to default to DANGEROUS
         }
     }
-
     /**
      * Generates Python script for metrics calculation
      */
@@ -302,7 +327,8 @@ class BatchApkAnalyzer(private val context: Context) {
             
             # Export misclassified samples
             errors_df = results_df[results_df['GROUND_TRUTH_LABEL'] != results_df['PREDICTED_LABEL']]
-            errors_df.to_csv(f"{outputDir}/misclassified_apks.csv", index=False)
+            errors_df.to_csv("$outputDir/misclassified_apks.csv", index=False)
+            
             print(f"\nMisclassified samples: {len(errors_df)}/{len(results_df)} ({len(errors_df)/len(results_df)*100:.2f}%)")
             
             # Summary file
@@ -318,7 +344,7 @@ class BatchApkAnalyzer(private val context: Context) {
                 f.write("Classification Report:\n")
                 f.write(classification_report(y_true, y_pred))
             
-            print(f"\nResults saved to: $outputDir")
+            print(f"\nResults saved to: {outputDir}")
         """.trimIndent()
     }
 

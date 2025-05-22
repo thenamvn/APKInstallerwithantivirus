@@ -97,7 +97,7 @@ class ApkAnalyzer(private val context: Context) {
         return tempFile
     }
 
-    private fun analyzePermissions(apkPath: String): List<String> {
+    fun analyzePermissions(apkPath: String): List<String> {
         val results = mutableListOf<String>()
         val packageInfo = context.packageManager.getPackageArchiveInfo(
             apkPath,
@@ -121,7 +121,7 @@ class ApkAnalyzer(private val context: Context) {
         return results
     }
 
-    private fun analyzeDexFiles(apkFile: File): List<String> {
+    fun analyzeDexFiles(apkFile: File): List<String> {
         val results = mutableListOf<String>()
         var suspiciousApisFound = false
 
