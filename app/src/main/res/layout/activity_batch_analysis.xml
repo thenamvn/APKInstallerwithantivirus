@@ -41,9 +41,7 @@
             android:id="@+id/edtDatasetPath"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
-    </com.google.android.material.textfield.TextInputLayout>
-
-    <com.google.android.material.textfield.TextInputLayout
+    </com.google.android.material.textfield.TextInputLayout>    <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/tilOutputPath"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -59,15 +57,80 @@
             android:layout_height="wrap_content" />
     </com.google.android.material.textfield.TextInputLayout>
 
+    <!-- Batch Configuration Section -->
+    <TextView
+        android:id="@+id/tvBatchConfig"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="⚡ Batch Processing Configuration"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tilOutputPath" />
+
+    <LinearLayout
+        android:id="@+id/llBatchConfig"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvBatchConfig">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:hint="LLM Batch Size">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/edtLlmBatchSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:text="8" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:hint="Parallel Batches">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/edtParallelBatches"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:text="2" />
+        </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvBatchInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="💡 Tăng batch size để giảm API calls. Tăng parallel batches để xử lý nhanh hơn."
+        android:textSize="12sp"
+        android:textColor="@android:color/darker_gray"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/llBatchConfig" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnStartAnalysis"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Start Analysis"
+        android:text="🚀 Start Optimized Analysis"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tilOutputPath" />
+        app:layout_constraintTop_toBottomOf="@id/tvBatchInfo" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/progressBar"

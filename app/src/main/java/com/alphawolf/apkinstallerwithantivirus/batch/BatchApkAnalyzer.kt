@@ -18,7 +18,22 @@ import java.util.Locale
 /**
  * Class to analyze multiple APK files in batch and export results to CSV
  */
-class BatchApkAnalyzer(private val context: Context) {
+class BatchApkAnalyzer(
+    private val context: Context,
+    private val llmBatchSize: Int = 8,
+    private val parallelBatchSize: Int = 2
+) {
+
+    // Progress callback interface
+    interface ProgressCallback {
+        fun onProgress(current: Int, total: Int, message: String)
+    }
+
+    private var progressCallback: ProgressCallback? = null
+
+    fun setProgressCallback(callback: ProgressCallback?) {
+        this.progressCallback = callback
+    }
 
     // Risk levels enum for clarity
     enum class RiskLevel(val label: String) {
@@ -26,6 +41,9 @@ class BatchApkAnalyzer(private val context: Context) {
         DANGEROUS("DANGEROUS"),
         UNKNOWN("UNKNOWN")
     }
+
+    // Simple cache to avoid re-analyzing same APKs
+    private val analysisCache = mutableMapOf<String, AnalysisResult>()
 
     companion object {
         // Map Vietnamese risk labels to enum
@@ -81,40 +99,166 @@ class BatchApkAnalyzer(private val context: Context) {
         } catch (e: Exception) {
             return@withContext "Lỗi: ${e.message}"
         }
-    }
-
-    // Phương thức mới để tách phần phân tích APK từ việc ghi file
+    }    // Phương thức mới để tách phần phân tích APK từ việc ghi file
     private suspend fun analyzeBatch(
         entries: List<DatasetEntry>
     ): Map<String, AnalysisResult> = withContext(Dispatchers.IO) {
         val results = mutableMapOf<String, AnalysisResult>()
 
-        // Xử lý theo lô để tránh quá tải hệ thống
-        val batchSize = 3
-        val total = entries.size
+        // Sử dụng batch LLM processing để tối ưu tốc độ với UI configuration
+        val total = entries.size        
+        println("🚀 Bắt đầu phân tích batch ${entries.size} APK với LLM batch size: $llmBatchSize, parallel batches: $parallelBatchSize")
+        progressCallback?.onProgress(0, total, "Bắt đầu phân tích batch...")
 
-        for (i in entries.indices step batchSize) {
-            val endIndex = minOf(i + batchSize, entries.size)
-            val batch = entries.subList(i, endIndex)
+        for (i in entries.indices step (llmBatchSize * parallelBatchSize)) {
+            val endIndex = minOf(i + (llmBatchSize * parallelBatchSize), entries.size)
+            val superBatch = entries.subList(i, endIndex)
 
-            // Xử lý đồng thời trong lô
-            val batchResults = batch.map { entry ->
+            // Chia thành các batch nhỏ hơn để xử lý song song
+            val parallelBatches = superBatch.chunked(llmBatchSize)
+            
+            val batchResults = parallelBatches.map { batch ->
                 async(Dispatchers.IO) {
                     try {
-                        val result = analyzeApk(entry.apkPath)
-                        println("Đã xử lý ${entries.indexOf(entry) + 1}/$total: ${entry.fileName}")
-                        entry.apkPath to result
+                        analyzeBatchWithLLM(batch)
                     } catch (e: Exception) {
-                        println("Lỗi phân tích ${entry.fileName}: ${e.message}")
+                        println("Lỗi phân tích batch: ${e.message}")
+                        emptyMap<String, AnalysisResult>()
+                    }
+                }
+            }.awaitAll()            // Merge tất cả kết quả
+            batchResults.forEach { batchResult ->
+                results.putAll(batchResult)
+            }
+
+            val processedCount = minOf(endIndex, total)
+            val progressPercent = (processedCount * 100 / total)
+            println("📊 Đã xử lý $processedCount/$total APK | Tỷ lệ hoàn thành: $progressPercent%")
+            progressCallback?.onProgress(processedCount, total, "Đã xử lý $processedCount/$total APK ($progressPercent%)")
+        }
+
+        // Print optimization summary
+        val totalProcessed = results.size
+        val cacheHits = total - results.values.count { !analysisCache.containsValue(it) }
+        println("🎯 Tối ưu hóa: Cache hits: $cacheHits/$total | LLM calls saved: ${cacheHits}")
+        println("⚡ Batch config: ${llmBatchSize} APKs/call, ${parallelBatchSize} parallel batches")
+
+        return@withContext results
+    }    /**
+     * Analyze a batch of APKs using single LLM call
+     */
+    private suspend fun analyzeBatchWithLLM(
+        entries: List<DatasetEntry>
+    ): Map<String, AnalysisResult> = withContext(Dispatchers.IO) {
+        val results = mutableMapOf<String, AnalysisResult>()
+        
+        if (entries.isEmpty()) return@withContext results
+
+        // Check cache first
+        val uncachedEntries = entries.filter { entry ->
+            val cacheKey = "${entry.apkPath}_${File(entry.apkPath).lastModified()}"
+            val cached = analysisCache[cacheKey]
+            if (cached != null) {
+                results[entry.apkPath] = cached
+                println("📋 Cached: ${entry.fileName}")
+                false
+            } else {
+                true
+            }
+        }
+
+        if (uncachedEntries.isEmpty()) return@withContext results
+
+        try {
+            // Step 1: Extract basic info for uncached APKs in parallel
+            val apkInfoList = uncachedEntries.map { entry ->
+                async(Dispatchers.IO) {
+                    try {
+                        val analyzer = ApkAnalyzer(context)
+                        val tempFile = analyzer.createTempFileFromUri(Uri.fromFile(File(entry.apkPath)))
+                        val appInfo = analyzer.extractAppInfo(tempFile.absolutePath)
+                        tempFile.delete()
+                        
+                        GeminiApiHelper.ApkBatchInfo(
+                            appName = appInfo.appName,
+                            packageName = appInfo.packageName,
+                            permissions = appInfo.permissions,
+                            description = appInfo.description
+                        ) to entry
+                    } catch (e: Exception) {
+                        println("⚠️ Lỗi extract info ${entry.fileName}: ${e.message}")
                         null
                     }
                 }
-            }.awaitAll().filterNotNull().toMap()
+            }.awaitAll().filterNotNull()
 
-            results.putAll(batchResults)
+            if (apkInfoList.isEmpty()) return@withContext results
+
+            println("🚀 Calling LLM for ${apkInfoList.size} APKs...")
+
+            // Step 2: Single LLM call for all APKs in this batch
+            val llmResults = GeminiApiHelper.analyzeBatchWithGemini(
+                apiKey = BuildConfig.GEMINI_API_KEY,
+                apkInfoList = apkInfoList.map { it.first }
+            )
+
+            // Step 3: Process results and cache them
+            apkInfoList.forEachIndexed { index, (apkInfo, entry) ->
+                try {
+                    val aiAnalysis = if (index < llmResults.size) llmResults[index] else "Lỗi: Không nhận được kết quả"
+                    val riskLevel = extractRiskLevel(aiAnalysis)
+                    
+                    val dangerousPermissions = apkInfo.permissions.filter { permission ->
+                        ApkAnalyzer.SUSPICIOUS_PERMISSIONS.any {
+                            permission.contains(it.replace("android.permission.", ""), ignoreCase = true)
+                        }
+                    }
+
+                    val predictedLabel = when(riskLevel) {
+                        RiskLevel.DANGEROUS, RiskLevel.UNKNOWN -> "MALWARE"
+                        RiskLevel.SAFE -> "SAFE"
+                    }
+
+                    val result = AnalysisResult(
+                        predictedLabel = predictedLabel,
+                        riskLevel = riskLevel,
+                        dangerousPermissions = dangerousPermissions,
+                        summary = aiAnalysis
+                    )
+
+                    results[entry.apkPath] = result
+                    
+                    // Cache the result
+                    val cacheKey = "${entry.apkPath}_${File(entry.apkPath).lastModified()}"
+                    analysisCache[cacheKey] = result
+
+                    println("✅ ${entry.fileName}: $predictedLabel (${riskLevel.label})")
+                } catch (e: Exception) {
+                    println("❌ Lỗi xử lý ${entry.fileName}: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            println("💥 Lỗi batch LLM: ${e.message}")
+            // Fallback to individual analysis
+            return@withContext analyzeBatchFallback(uncachedEntries)
         }
 
         return@withContext results
+    }
+
+    /**
+     * Fallback to individual analysis if batch fails
+     */
+    private suspend fun analyzeBatchFallback(entries: List<DatasetEntry>): Map<String, AnalysisResult> {
+        println("Switching to individual analysis fallback...")
+        return entries.mapNotNull { entry ->
+            try {
+                entry.apkPath to analyzeApk(entry.apkPath)
+            } catch (e: Exception) {
+                println("Fallback failed for ${entry.fileName}: ${e.message}")
+                null
+            }
+        }.toMap()
     }
 
     // Phương thức mới để tạo file CSV kết quả sau khi đã có phân tích thành công
