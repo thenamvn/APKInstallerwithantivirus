@@ -29,6 +29,9 @@ import kotlinx.coroutines.withContext
 import com.alphawolf.apkinstallerwithantivirus.utils.GeminiApiHelper
 import java.io.File
 
+import com.alphawolf.apkinstallerwithantivirus.analysis.SemanticMismatchDetector
+import com.alphawolf.apkinstallerwithantivirus.analysis.MismatchType
+
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var currentUri: Uri? = null
@@ -195,11 +198,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun analyzeApk(uri: Uri) {
-        if (isAnalyzing) return
-
         isAnalyzing = true
         binding.progressBar.visibility = View.VISIBLE
-        binding.tvAnalysisResult.text = "Analyzing APK for potential threats..."
+        binding.tvAnalysisResult.text = "Analyzing APK for semantic mismatches..."
         binding.btnInstall.isEnabled = false
 
         lifecycleScope.launch {
@@ -207,62 +208,57 @@ class MainActivity : AppCompatActivity() {
                 val tempFile = withContext(Dispatchers.IO) {
                     ApkAnalyzer(applicationContext).createTempFileFromUri(uri)
                 }
-                val apkAnalyzer = ApkAnalyzer(applicationContext)
-
-                binding.tvAnalysisResult.text = "Analyzing basic security..."
-
+                
+                // Use new semantic mismatch detector
+                val detector = SemanticMismatchDetector(applicationContext)
+                
+                binding.tvAnalysisResult.text = "Performing deep semantic analysis..."
+                
                 val result = withContext(Dispatchers.IO) {
-                    apkAnalyzer.analyzeApk(uri)
+                    detector.analyzeApk(tempFile.absolutePath)
                 }
-                val appInfo = apkAnalyzer.extractAppInfo(tempFile.absolutePath)
-                val appName = appInfo.appName
-                val packageName = appInfo.packageName
-                val permissions = appInfo.permissions
-                val description = appInfo.description
                 
+                // Display comprehensive results
                 binding.tvAnalysisResult.text = """
-                    Basic Analysis:
-                    ${result.joinToString("\n")}
+                    🔍 PHÂN TÍCH SEMANTIC MISMATCH
                     
-                    Analyzing with AI...
-                """.trimIndent()
-
-                // Gọi Gemini API
-                val geminiResult = try {
-                    GeminiApiHelper.analyzeWithGemini(
-                        apiKey = BuildConfig.GEMINI_API_KEY, // Lấy API key từ BuildConfig
-                        appName = appName,
-                        packageName = packageName,
-                        permissions = permissions,
-                        description = description
-                    )
-                } catch (e: Exception) {
-                    "AI analysis failed: ${e.message}"
-                }
-    
-                // Hiển thị kết quả đầy đủ
-                binding.tvAnalysisResult.text = """
-                    Basic Analysis:
-                    ${result.joinToString("\n")}
+                    📊 ĐIỂM RỦI RO: ${result.riskScore}
+                    🎯 MỨC ĐỘ: ${result.riskLevel.label}
                     
-                    AI Analysis:
-                    $geminiResult
+                    📋 CÁC VẤN ĐỀ:
+                    ${result.riskFactors.joinToString("\n") { "• $it" }}
+                    
+                    🤖 PHÂN TÍCH AI:
+                    ${result.llmAnalysis}
+                    
+                    📈 CHI TIẾT:
+                    • Loại app: ${result.detailedReport.expectedBehavior.appType}
+                    • Quyền đáng ngờ: ${result.detailedReport.mismatches.count { it.type == MismatchType.SUSPICIOUS_PERMISSION }}
+                    • API lệch chức năng: ${result.detailedReport.mismatches.count { it.type == MismatchType.SUSPICIOUS_API }}
+                    • Dấu hiệu obfuscation: ${result.detailedReport.actualBehavior.obfuscationSignals.size}
                 """.trimIndent()
                 
-                isSuspiciousApk = result.any { it.contains("SUSPICIOUS", true) }
+                isSuspiciousApk = result.riskLevel != SemanticMismatchDetector.RiskLevel.SAFE
                 binding.btnInstall.isEnabled = true
-    
-                if (isSuspiciousApk) {
-                    binding.btnInstall.text = "Install Anyway (Not Recommended)"
-                    binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_alert)
-                } else {
-                    binding.btnInstall.text = "Install"
-                    binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_info)
+
+                when (result.riskLevel) {
+                    SemanticMismatchDetector.RiskLevel.SAFE -> {
+                        binding.btnInstall.text = "Install"
+                        binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_info)
+                    }
+                    SemanticMismatchDetector.RiskLevel.MEDIUM -> {
+                        binding.btnInstall.text = "Install with Caution"
+                        binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_alert)
+                    }
+                    SemanticMismatchDetector.RiskLevel.DANGEROUS -> {
+                        binding.btnInstall.text = "Install Anyway (High Risk)"
+                        binding.statusIcon.setImageResource(android.R.drawable.ic_delete)
+                    }
                 }
-    
+
                 tempFile.delete()
             } catch (e: Exception) {
-                binding.tvAnalysisResult.text = "Error analyzing APK: ${e.message}"
+                binding.tvAnalysisResult.text = "Error in semantic analysis: ${e.message}"
                 binding.btnInstall.isEnabled = false
                 binding.statusIcon.setImageResource(android.R.drawable.ic_dialog_alert)
             } finally {
