@@ -20,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.constraintlayout.widget.ConstraintLayout
+import com.alphawolf.apkinstallerwithantivirus.R 
 
 class BatchAnalysisActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBatchAnalysisBinding
@@ -35,21 +37,66 @@ class BatchAnalysisActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityBatchAnalysisBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
+        
+        // Setup action bar with back button
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = "APK Batch Analysis"
+        
         setupUI()
     }
 
+    private fun setupActionBar() {
+        // Enable back button in action bar
+        supportActionBar?.apply {
+            setDisplayHomeAsUpEnabled(true)
+            setDisplayShowHomeEnabled(true)
+            title = "Batch APK Analysis"
+        }
+        
+        // Ẩn header có nút back trùng lặp vì đã có back button trên action bar
+        binding.llHeader.visibility = View.GONE
+        
+        // Cập nhật constraint cho phần tử phía dưới llHeader
+        val params = binding.tvInstructions.layoutParams as ConstraintLayout.LayoutParams
+        params.topToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+        params.topMargin = resources.getDimensionPixelSize(R.dimen.margin_normal)
+        binding.tvInstructions.layoutParams = params
+    }
+    // Handle back button press in action bar
+    override fun onSupportNavigateUp(): Boolean {
+        onBackPressed()
+        return true
+    }
+    // Handle back button press
+    override fun onBackPressed() {
+        if (isAnalyzing) {
+            // Show confirmation dialog if analysis is running
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("⚠️ Đang phân tích")
+                .setMessage("Batch analysis đang chạy. Bạn có muốn dừng và quay về không?")
+                .setPositiveButton("Dừng và quay về") { _, _ ->
+                    // Stop analysis and go back
+                    isAnalyzing = false
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnStartAnalysis.isEnabled = true
+                    super.onBackPressed()
+                }
+                .setNegativeButton("Tiếp tục") { dialog, _ ->
+                    dialog.dismiss()
+                }
+                .show()
+        } else {
+            super.onBackPressed()
+        }
+    }
     private fun setupUI() {
-        // Set default paths
+        // Default paths
         val defaultDatasetPath = File(Environment.getExternalStorageDirectory(), "apk_dataset").absolutePath
         val defaultOutputPath = File(getExternalFilesDir(null), "test_results").absolutePath
-
+        
         binding.edtDatasetPath.setText(defaultDatasetPath)
         binding.edtOutputPath.setText(defaultOutputPath)
-
-        setupDefaultFolders(defaultDatasetPath)
-
-
+        
         binding.btnStartAnalysis.setOnClickListener {
             if (checkPermissions()) {
                 startBatchAnalysis()
@@ -59,6 +106,36 @@ class BatchAnalysisActivity : AppCompatActivity() {
         }
     }
 
+    private fun showHelpDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("📖 Hướng dẫn Batch Analysis")
+            .setMessage("""
+                🎯 MỤC ĐÍCH:
+                Phân tích hàng loạt APK để đánh giá độ chính xác của hệ thống detection.
+                
+                📁 CẤU TRÚC THỨ MỤC:
+                dataset/
+                ├── safe/        (APK an toàn)
+                └── malware/     (APK độc hại)
+                
+                ⚡ TỐI ƯU HÓA:
+                • LLM Batch Size: Số APK phân tích cùng lúc
+                • Parallel Batches: Số batch chạy song song
+                
+                📊 KẾT QUẢ:
+                • CSV files với kết quả phân tích
+                • Python script tính accuracy metrics
+                • Confusion matrix và performance stats
+                
+                💡 MẸO:
+                • Batch size 8-12 cho tốc độ tối ưu
+                • Parallel batches 2-3 cho hiệu suất cao
+            """.trimIndent())
+            .setPositiveButton("Hiểu rồi") { dialog, _ -> 
+                dialog.dismiss() 
+            }
+            .show()
+    }
 
     private fun setupDefaultFolders(datasetPath: String) {
         try {

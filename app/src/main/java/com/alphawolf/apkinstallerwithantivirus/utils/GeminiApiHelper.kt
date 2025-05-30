@@ -15,7 +15,7 @@ object GeminiApiHelper {
         description: String?,
         packageName: String
     ): String = withContext(Dispatchers.IO) {
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=$apiKey")
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=$apiKey")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.setRequestProperty("Content-Type", "application/json")
@@ -37,18 +37,26 @@ object GeminiApiHelper {
         YÊU CẦU PHÂN TÍCH
         =====================
         Dựa trên kiến thức của bạn về các ứng dụng phổ biến, hãy:
-        1. Phân loại loại ứng dụng này có thể là gì (game, camera, công cụ, xã hội…)
-        2. Đánh giá liệu tên, package name và mô tả có khớp với loại ứng dụng đó không
-        3. Đánh giá các quyền có phù hợp với chức năng dự kiến không
+        1. Phân loại loại ứng dụng này có thể là gì (game, camera, công cụ, xã hội…) dựa trên name app, package name và mô tả ứng dụng.
+        2. Đưa ra danh sách kì vọng các quyền và api call, chức năng phù hợp cho loại ứng dụng đó.
+        3. Đánh giá các quyền, api call có tương đồng với kì vọng hay không, phù hợp với ứng dụng hay ko
         4. Xác định các quyền KHÔNG cần thiết cho chức năng chính
+        5. Đưa ra mức độ rủi ro của ứng dụng này (AN TOÀN/NGUY HIỂM) dựa trên phân tích trên
+        6. Trả lời bằng tiếng Việt, ngắn gọn, súc tích
 
         =====================
         HƯỚNG DẪN ĐÁNH GIÁ
         =====================
+        - Package name đáng tin cậy thường khớp với nhà phát triển thực sự.
+        - Số lượng quyền không phải là yếu tố quyết định; nhiều ứng dụng hợp pháp cần nhiều quyền
         - Các quyền bất thường chỉ đáng lo nếu trái với chức năng dự kiến
         - Ứng dụng chỉnh sửa ảnh, game… có thể hợp lý khi dùng quyền lưu trữ, đọc media
-        - Các ứng dụng “nhẹ” như đèn pin, máy tính không nên yêu cầu quyền gửi SMS hay đọc danh bạ
+        - Các ứng dụng “nhẹ” như đèn pin, máy tính không nên yêu cầu quyền gửi SMS hay đọc danh bạ, do đó có thể là dấu hiệu của phần mềm độc hại
+        - Quyền truy cập vào SMS, danh bạ, vị trí thường không cần thiết trừ khi ứng dụng có chức năng liên quan
+        - Quyền truy cập vào camera, microphone chỉ cần thiết nếu ứng dụng có chức năng liên quan
         - Package name đáng tin cậy thường trùng với tên nhà phát triển thật
+        - Các ứng dụng yêu cầu ít quyền, đặc biệt là quyền nguy hiểm thì thường đa số là an toàn
+        - Ứng dụng camera cần quyền camera, ứng dụng bản đồ cần quyền vị trí, v.v. là bình thường
 
         =====================
         PHẢN HỒI THEO MẪU SAU
@@ -180,10 +188,28 @@ object GeminiApiHelper {
         =====================
         
         Với mỗi APK, hãy:
-        1. Phân loại loại ứng dụng (game, camera, công cụ, xã hội...)
-        2. Đánh giá tên và package có khớp với chức năng không
-        3. Đánh giá quyền có phù hợp với chức năng dự kiến không
-        4. Xác định quyền KHÔNG cần thiết
+        Dựa trên kiến thức của bạn về các ứng dụng phổ biến, hãy:
+        1. Phân loại loại ứng dụng này có thể là gì (game, camera, công cụ, xã hội…) dựa trên name app, package name và mô tả ứng dụng.
+        2. Đưa ra danh sách kì vọng các quyền và api call, chức năng phù hợp cho loại ứng dụng đó.
+        3. Đánh giá các quyền, api call có tương đồng với kì vọng hay không, phù hợp với ứng dụng hay ko
+        4. Xác định các quyền KHÔNG cần thiết cho chức năng chính
+        5. Đưa ra mức độ rủi ro của ứng dụng này (AN TOÀN/NGUY HIỂM) dựa trên phân tích trên
+        6. Trả lời bằng tiếng Việt, ngắn gọn, súc tích
+
+
+        =====================
+        HƯỚNG DẪN ĐÁNH GIÁ
+        =====================
+        - Package name đáng tin cậy thường khớp với nhà phát triển thực sự.
+        - Số lượng quyền không phải là yếu tố quyết định; nhiều ứng dụng hợp pháp cần nhiều quyền
+        - Các quyền bất thường chỉ đáng lo nếu trái với chức năng dự kiến
+        - Ứng dụng chỉnh sửa ảnh, game… có thể hợp lý khi dùng quyền lưu trữ, đọc media
+        - Các ứng dụng “nhẹ” như đèn pin, máy tính không nên yêu cầu quyền gửi SMS hay đọc danh bạ, do đó có thể là dấu hiệu của phần mềm độc hại
+        - Quyền truy cập vào SMS, danh bạ, vị trí thường không cần thiết trừ khi ứng dụng có chức năng liên quan
+        - Quyền truy cập vào camera, microphone chỉ cần thiết nếu ứng dụng có chức năng liên quan
+        - Package name đáng tin cậy thường trùng với tên nhà phát triển thật
+        - Các ứng dụng yêu cầu ít quyền, đặc biệt là quyền nguy hiểm thì thường đa số là an toàn
+        - Ứng dụng camera cần quyền camera, ứng dụng bản đồ cần quyền vị trí, v.v. là bình thường
 
         =====================
         FORMAT PHẢN HỒI CHO TỪNG APK
