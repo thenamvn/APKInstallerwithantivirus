@@ -341,7 +341,8 @@ class BatchAnalysisActivity : AppCompatActivity() {
             isAnalyzing = true
             binding.progressBar.visibility = View.VISIBLE
             binding.btnStartAnalysis.isEnabled = false
-            binding.tvStatus.text = "Starting batch analysis..."            lifecycleScope.launch {
+            binding.tvStatus.text = "Starting batch analysis..."
+            lifecycleScope.launch {
                 try {
                     val analyzer = BatchApkAnalyzer(
                         context = applicationContext,
