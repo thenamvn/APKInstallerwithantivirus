@@ -39,8 +39,8 @@ object GeminiApiHelper {
         Dựa trên kiến thức của bạn về các ứng dụng phổ biến, hãy:
         1. Phân loại loại ứng dụng này có thể là gì (game, camera, công cụ, xã hội…) dựa trên name app, package name và mô tả ứng dụng.
         2. Đưa ra danh sách kì vọng các quyền và api call, chức năng phù hợp cho loại ứng dụng đó.
-        3. Đánh giá các quyền, api call có tương đồng với kì vọng hay không, phù hợp với ứng dụng hay ko
-        4. Xác định các quyền KHÔNG cần thiết cho chức năng chính
+        3. Đánh giá các quyền, api call thực tế mà ứng dụng sử dụng có tương đồng với danh sách quyền , api call kì vọng hay không, có phù hợp với ứng dụng đó không.
+        4. Xác định các quyền KHÔNG cần thiết cho chức năng chính và có thể là dấu hiệu của phần mềm độc hại.
         5. Đưa ra mức độ rủi ro của ứng dụng này (AN TOÀN/NGUY HIỂM) dựa trên phân tích trên
         6. Trả lời bằng tiếng Việt, ngắn gọn, súc tích
 
@@ -62,10 +62,9 @@ object GeminiApiHelper {
         PHẢN HỒI THEO MẪU SAU
         =====================
 
-        MỨC ĐỘ RỦI RO: [AN TOÀN/NGUY HIỂM]  
+        KẾT QUẢ: [AN TOÀN/NGUY HIỂM]  
         PHÂN LOẠI LOẠI ỨNG DỤNG: [...]  
-        PHÂN TÍCH: [...]  
-        CÁC VẤN ĐỀ CHÍNH: [nếu có, liệt kê các quyền bất thường]
+        LÍ DO: [nếu có, liệt kê các quyền bất thường]
 
         Trả lời hoàn toàn bằng tiếng Việt.
         """.trimIndent()
