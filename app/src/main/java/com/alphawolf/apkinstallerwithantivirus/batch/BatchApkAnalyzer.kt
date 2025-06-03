@@ -268,12 +268,22 @@ class BatchApkAnalyzer(
         results: Map<String, AnalysisResult>
     ) {
         FileWriter(file).use { writer ->
-            writer.append("APK_PATH,FILENAME,GROUND_TRUTH_LABEL,PREDICTED_LABEL,AI_RISK_LEVEL,")
+            writer.append("APK_PATH,FILENAME,APP_NAME,PACKAGE_NAME,GROUND_TRUTH_LABEL,PREDICTED_LABEL,AI_RISK_LEVEL,")
                 .append("DANGEROUS_PERMISSIONS,ANALYSIS_SUMMARY\n")
 
+            // entries.forEach { entry ->
+            //     val result = results[entry.apkPath] ?: return@forEach
+            //     val csvLine = "${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},"
+            //         .plus("${result.predictedLabel},${result.riskLevel.label},")
+            //         .plus("\"${result.dangerousPermissions.joinToString(";")}\",")
+            //         .plus("\"${result.summary.replace("\"", "'").replace("\n", " ")}\"")
+
+            //     writer.append(csvLine).append('\n')
+            // }
             entries.forEach { entry ->
                 val result = results[entry.apkPath] ?: return@forEach
-                val csvLine = "${entry.apkPath},${entry.fileName},${entry.groundTruthLabel},"
+                // Add app name and package name to the CSV line
+                val csvLine = "${entry.apkPath},${entry.fileName},${result.appName},${result.packageName},${entry.groundTruthLabel},"
                     .plus("${result.predictedLabel},${result.riskLevel.label},")
                     .plus("\"${result.dangerousPermissions.joinToString(";")}\",")
                     .plus("\"${result.summary.replace("\"", "'").replace("\n", " ")}\"")
@@ -435,6 +445,7 @@ class BatchApkAnalyzer(
             # Load data
             dataset_df = pd.read_csv("$datasetPath")
             results_df = pd.read_csv("$resultsPath")
+            outputDir = os.getcwd()
             
             # Calculate metrics
             y_true = results_df['GROUND_TRUTH_LABEL']
