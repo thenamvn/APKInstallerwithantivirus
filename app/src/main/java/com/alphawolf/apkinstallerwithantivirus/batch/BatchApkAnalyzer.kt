@@ -223,7 +223,9 @@ class BatchApkAnalyzer(
                         predictedLabel = predictedLabel,
                         riskLevel = riskLevel,
                         dangerousPermissions = dangerousPermissions,
-                        summary = aiAnalysis
+                        summary = aiAnalysis,
+                        appName = apkInfo.appName,
+                        packageName = apkInfo.packageName
                     )
 
                     results[entry.apkPath] = result
@@ -382,7 +384,9 @@ class BatchApkAnalyzer(
                 predictedLabel = predictedLabel,
                 riskLevel = riskLevel,
                 dangerousPermissions = dangerousPermissions,
-                summary = aiAnalysisResult
+                summary = aiAnalysisResult,
+                appName = appName,
+                packageName = packageName
             )
         } finally {
             // Clean up temporary file
@@ -515,6 +519,8 @@ class BatchApkAnalyzer(
         val predictedLabel: String,
         val riskLevel: RiskLevel,
         val dangerousPermissions: List<String>,
-        val summary: String
+        val summary: String,
+        val appName: String = "",
+        val packageName: String = ""
     )
 }

@@ -199,16 +199,29 @@ object GeminiApiHelper {
         =====================
         HƯỚNG DẪN ĐÁNH GIÁ
         =====================
+        
+        QUYỀN AN TOÀN/BÌNH THƯỜNG (KHÔNG NGUY HIỂM):
+        - Quyền bộ nhớ (WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, MANAGE_EXTERNAL_STORAGE): Gần như không nguy hiểm, hầu hết ứng dụng đều cần
+        - Quyền mạng (INTERNET, ACCESS_NETWORK_STATE): Rất phổ biến và an toàn
+        - Quyền rung (VIBRATE): Hoàn toàn an toàn  
+        - Quyền đọc media (READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_AUDIO): Bình thường cho ứng dụng media
+        - Quyền foreground service: Bình thường cho ứng dụng cần chạy nền
+        - Quyền wake lock, boot completed: Phổ biến cho ứng dụng
+        
+        QUYỀN CẦN THẬN TRỌNG:
+        - SMS (SEND_SMS, READ_SMS, RECEIVE_SMS): Chỉ cần thiết cho ứng dụng tin nhắn
+        - Danh bạ (READ_CONTACTS, WRITE_CONTACTS): Chỉ cần cho ứng dụng liên hệ/xã hội  
+        - Vị trí (ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION): Chỉ cần cho ứng dụng bản đồ/vị trí
+        - Camera/Mic (CAMERA, RECORD_AUDIO): Chỉ cần cho ứng dụng có chức năng tương ứng
+        - Cuộc gọi (CALL_PHONE, READ_PHONE_STATE): Chỉ cần cho ứng dụng điện thoại
+        
+        NGUYÊN TẮC ĐÁNH GIÁ:
         - Package name đáng tin cậy thường khớp với nhà phát triển thực sự.
         - Số lượng quyền không phải là yếu tố quyết định; nhiều ứng dụng hợp pháp cần nhiều quyền
         - Các quyền bất thường chỉ đáng lo nếu trái với chức năng dự kiến
         - Ứng dụng chỉnh sửa ảnh, game… có thể hợp lý khi dùng quyền lưu trữ, đọc media
-        - Các ứng dụng “nhẹ” như đèn pin, máy tính không nên yêu cầu quyền gửi SMS hay đọc danh bạ, do đó có thể là dấu hiệu của phần mềm độc hại
-        - Quyền truy cập vào SMS, danh bạ, vị trí thường không cần thiết trừ khi ứng dụng có chức năng liên quan
-        - Quyền truy cập vào camera, microphone chỉ cần thiết nếu ứng dụng có chức năng liên quan
-        - Package name đáng tin cậy thường trùng với tên nhà phát triển thật
-        - Các ứng dụng yêu cầu ít quyền, đặc biệt là quyền nguy hiểm thì thường đa số là an toàn
-        - Ứng dụng camera cần quyền camera, ứng dụng bản đồ cần quyền vị trí, v.v. là bình thường
+        - Các ứng dụng "nhẹ" như đèn pin, máy tính không nên yêu cầu quyền SMS, danh bạ, cuộc gọi
+        - Ứng dụng camera cần quyền camera, ứng dụng bản đồ cần quyền vị trí là bình thường
 
         =====================
         FORMAT PHẢN HỒI CHO TỪNG APK
